@@ -8,6 +8,17 @@ In order to use this module, build it using `make` and load it into Redis. (you 
 
 `rertree.so` file will be compiled.
 
+## Building Redis
+
+https://redis.io/download
+
+Download, extract and compile Redis with:
+
+$ wget http://download.redis.io/releases/redis-4.0.2.tar.gz
+$ tar xzf redis-4.0.2.tar.gz
+$ cd redis-4.0.2
+$ make
+
 ### Using
 
 **Invoking redis with the module loaded**
