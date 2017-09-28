@@ -157,6 +157,30 @@ static int RtFind_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, in
   return REDISMODULE_OK;
 }
 
+static int RtCount_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+  RedisModule_AutoMemory(ctx);
+  if (argc != 2) {
+    RedisModule_WrongArity(ctx);
+    return REDISMODULE_ERR;
+  }
+
+  RedisModuleKey *key = RedisModule_OpenKey(ctx, argv[1], REDISMODULE_READ | REDISMODULE_WRITE);
+  RTreePtr *prtree = NULL;
+  int status = rtGetValue(key, &prtree);
+  if (status != RT_OK) {
+    return RedisModule_ReplyWithError(ctx, statusStrerror(status));
+  }
+
+  size_t count;
+  struct RTNodeList val;
+  RTSelectDimensions(prtree, val.I);
+  RTSelectTuple(prtree, val.I, NULL, &count);
+
+  RedisModule_ReplyWithLongLong(ctx, count);
+
+  return REDISMODULE_OK;
+}
+
 static void NodeRdbLoad(RedisModuleIO *io, struct RTNodeList *pnode) {
   pnode->Next = NULL;
   pnode->I[0] = RedisModule_LoadUnsigned(io);
@@ -192,23 +216,24 @@ static void *RtRdbLoad(RedisModuleIO *io, int encver) {
 
 static void RtRdbSave(RedisModuleIO *io, void *obj) { 
   RTreePtr *prtree = obj;
-  struct RTNodeList *list, *list_save;
+  struct RTNodeList val;
   size_t count;
-  RTdimension I[RTn*2];
-  
-  RTSelectDimensions(prtree, I);
-  RTSelectTuple(prtree, I, &list, &count); // will use LOTS of memory with prod size, need to optimize
-  list_save = list;
+  RTreeIterPtr iter;
 
+  RTSelectDimensions(prtree, val.I);
+  RTSelectTuple(prtree, val.I, NULL, &count);
   RedisModule_SaveUnsigned(io, count);
-  for (size_t i = 0; i < count; ++i) {
-    RedisModule_SaveUnsigned(io, list->I[0]);
-    RedisModule_SaveUnsigned(io, list->I[1]);
-    RedisModule_SaveUnsigned(io, *((long long*)list->Tuple));
-    list = list->Next;
-  }
 
-  //FreeNodeList(list_save);//TODO free
+  GetIter(*prtree, &iter);
+  while (iter) {
+    count--;
+    IterValue(iter, &val);
+    RedisModule_SaveUnsigned(io, val.I[0]);
+    RedisModule_SaveUnsigned(io, val.I[1]);
+    RedisModule_SaveUnsigned(io, *((long long*)val.Tuple));
+
+    IterMoveNext(&iter);
+  }
 }
 
 static void RtAofRewrite(RedisModuleIO *aof, RedisModuleString *key, void *value) {
@@ -262,6 +287,9 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx) {
                                 1) == REDISMODULE_ERR)
     return REDISMODULE_ERR;
   if (RedisModule_CreateCommand(ctx, "rtree.find", RtFind_RedisCommand,
+                                "readonly", 1, 1, 1) == REDISMODULE_ERR)
+    return REDISMODULE_ERR;
+  if (RedisModule_CreateCommand(ctx, "rtree.count", RtCount_RedisCommand,
                                 "readonly", 1, 1, 1) == REDISMODULE_ERR)
     return REDISMODULE_ERR;
 

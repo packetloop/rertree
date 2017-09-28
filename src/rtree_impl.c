@@ -48,6 +48,126 @@ static bool CondenseTree(struct RTNode *N, struct RTNode **root);
 static bool LinearSplit(struct RTNode *L, RTdimension I[], void *Tuple, struct RTNode *Child, struct RTNode **split);
 static bool LinearPickSeeds(struct RTNode NL[], long double *width, struct RTNode **hbest, struct RTNode **lbest);
 
+
+struct RIter { // head of list holds current tuple node, tail points to tree root
+    struct RTNode *Node;
+    struct RIter *Prev;
+    struct RIter *Next;
+};
+
+static struct RTNode *GetFirstChild(struct RTNode *N) {
+  int indx = 0;
+  for (; indx < M ; indx++)
+      if (N->Child[indx].Child || N->Child[indx].Tuple)
+        return &N->Child[indx];
+  return NULL;
+}
+
+static struct RTNode *GetNextChild(struct RTNode *N, struct RTNode *CurrentChild) {
+  int indx = CurrentChild - N->Child;
+  for (indx += 1; indx < M ; indx++)
+      if (N->Child[indx].Child || N->Child[indx].Tuple)
+        return &N->Child[indx];
+  return NULL;
+}
+
+static struct RIter *IterNew(struct RTNode *T) {
+  if (!T)
+    return NULL;
+
+  struct RIter *res = malloc(sizeof(struct RIter));
+  res->Next = NULL;
+  res->Prev = NULL;
+  res->Node = T;
+  return res;
+}
+
+static void GetNodeIter(struct RTNode *T, RTreeIterPtr *res) {
+  if (!T) {
+    *res = NULL;
+    return;
+  }
+
+  if (IS_TUPLE(T)) {
+    *res = IterNew(T);
+    return;
+  }
+
+  struct RIter *Tail = IterNew(T), *Head, *HeadTail;
+
+  GetNodeIter(GetFirstChild(T), &Head);
+  HeadTail = Head;
+  while (HeadTail->Next) // go to tail
+    HeadTail = HeadTail->Next;
+
+  HeadTail->Next = Tail;
+  Tail->Prev = HeadTail;
+
+  *res = Head;
+}
+
+void GetIter(RTreePtr ptree, RTreeIterPtr *res) {
+  GetNodeIter(ptree, res);
+}
+
+void IterMoveNext(RTreeIterPtr *pIterPtr) {
+  struct RTNode *OldHeadNode, *NextChild;
+  struct RIter *pIter, *pSave, *pNewHead, *pTailOfHead;
+  pIter = *pIterPtr;
+
+  if (!pIter) {//TODO error
+      *pIterPtr = NULL;
+      return;
+  }
+
+  do {
+    pSave = pIter;
+    OldHeadNode = pIter->Node;
+    pIter = pIter->Next;
+    free(pSave);
+
+    if (!pIter) {
+      *pIterPtr = NULL;
+      return;
+    }
+
+    NextChild = GetNextChild(pIter->Node, OldHeadNode);
+  } while( !NextChild );
+
+  if (!NextChild) {
+      *pIterPtr = NULL;
+      return;
+  }
+  // go down
+  GetNodeIter(NextChild, &pNewHead);
+
+  pTailOfHead = pNewHead;
+  while (pTailOfHead->Next)
+    pTailOfHead = pTailOfHead->Next;
+
+  pIter->Prev = pTailOfHead;
+  pTailOfHead->Next = pIter;
+
+  *pIterPtr = pNewHead;
+}
+
+void IterValue(RTreeIterPtr IterPtr, struct RTNodeList *pval) {
+  memcpy(pval->I, IterPtr->Node->I, sizeof(pval->I));
+  pval->Tuple = IterPtr->Node->Tuple;
+}
+
+void IterFree(RTreeIterPtr *pIterPtr) {
+  struct RIter *pIter, *pSave;
+  pIter = *pIterPtr;
+  while (pIter) {
+    pSave = pIter;
+    pIter = pIter->Next;
+    free(pSave);
+  }
+
+  *pIterPtr = NULL;
+}
+
 /*Wrapper for malloc checks for out of memory*/
 static void *mem_alloc(size_t size) {
    void *mem = malloc(size);

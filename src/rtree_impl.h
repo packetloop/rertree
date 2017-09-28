@@ -37,6 +37,13 @@ bool RTUpdateTuple(RTreePtr *T, RTdimension I[], void *Tuple, void *New);
 bool RTUpdateDimensions(RTreePtr *T, RTdimension I[], void *Tuple, RTdimension New[]);
 bool RTFreeTree(RTreePtr *T);
 
+struct RIter;
+typedef struct RIter * RTreeIterPtr;
+void GetIter(RTreePtr ptree, RTreeIterPtr *res);
+void IterMoveNext(RTreeIterPtr *pIterPtr);
+void IterValue(RTreeIterPtr IterPtr, struct RTNodeList *pval);
+void IterFree(RTreeIterPtr *pIterPtr);
+
 #ifdef RTREE_DEBUG
 bool RTTrace(struct RTNode *Start, size_t Level, size_t AbsChild, struct RTNode **Out);
 bool RTDump(struct RTNode *Start, const char *filename);
