@@ -1,0 +1,41 @@
+Setup Redis with dateranges-to-ids index
+
+-build Redis
+wget http://download.redis.io/releases/redis-4.0.2.tar.gz
+tar xzf redis-4.0.2.tar.gz
+cd redis-4.0.2
+make
+cd ..
+
+-build module
+git clone https://github.com/packetloop/rertree.git
+cd rertree/
+make
+
+run redis server 
+./redis-4.0.2/src/redis-server --loadmodule rertree/rertree.so 
+
+
+- getting data
+mkdir postgress_preprocesed
+cd postgress_preprocesed/
+aws s3 cp s3://verified-attacks/postgress_preprocessed/ ./ --recursive
+# convert to `all` file `start stop id` format
+cat *00 | sed 's/.*|{/{/g' | sed 's/'"'"'/\"/g' | sed 's/True/true/g' | sed 's/False/false/g' | jq -c '[.start, .stop, .id] | @csv' | sed 's/:[^"]*\"//g' | sed 's/"\\"//g' | sed 's/[,"\\]/ /g' | awk '{print $1/1000 " " $2/1000 " " $3;}' > ./all
+# join strings - speeds up upload
+sed '$!N;s/\n/ /' ./all > all2
+sed '$!N;s/\n/ /' ./all2 > all4
+sed '$!N;s/\n/ /' ./all4 > all8
+sed '$!N;s/\n/ /' ./all8 > all16
+sed '$!N;s/\n/ /' ./all16 > all32
+sed '$!N;s/\n/ /' ./all32 > all64
+sed '$!N;s/\n/ /' ./all64 > all128
+sed '$!N;s/\n/ /' ./all128 > all256
+cat all256 | sed 's/^/rtree.add aa /g' > cmds
+# now `cmds` holds all `rtree.add` commands needed for creation of index
+# run them
+../redis-4.0.2/src/redis-cli < cmds
+
+Check import 
+../redis-4.0.2/src/redis-cli
+rtree.find aa 1483228800 1483232400
